@@ -1,0 +1,614 @@
+---
+title: "MKT566 Homework 1 — Meridian Slate Recommendation"
+author: "Xuyang Xia — Last digit of USC ID: 0 — Assigned genre: Drama"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    number_sections: false
+---
+
+```{r setup, include=FALSE}
+library(data.table)
+library(ggplot2)
+library(scales)
+
+plot_palette <- c(
+  navy = "#2E5B88",
+  terracotta = "#C56A4A",
+  sage = "#6F8F72",
+  gold = "#D4A64A",
+  slate = "#4D5966",
+  sky = "#A9C9D9",
+  ivory = "#F5F1EA"
+)
+
+knitr::opts_chunk$set(
+  echo = TRUE, warning = FALSE, message = FALSE,
+  fig.width = 7, fig.height = 4.5, dpi = 150
+)
+```
+
+# Part 1 — Decision brief
+
+Prior: A successful slate should prioritize quality, audience reach, and stable genre demand. I will use rating and vote count as the main criteria, with genre and director acting as secondary checks. I expect the rating distribution to be close to symmetric, so the mean is reasonable; I will only switch to the median if the distribution turns out to be skewed.
+
+My decision rule: I will treat films above the mean rating and above the median vote count as the strongest candidates, then use genre stability to avoid noisy categories. A genre is worth extra weight only if its audience demand stays within a reasonable fluctuation range rather than spiking unpredictably. Directors act as a backup factor, not the main decision rule.
+
+What would change my mind: If rating or vote count is strongly skewed, I would replace the mean with the median. If a genre shows unstable demand or the director pool becomes too thin, I would shift weight toward higher-frequency, more stable categories.
+
+---
+
+# Data
+
+## Load
+
+```{r load-data}
+url <- "https://drive.google.com/uc?export=download&id=1d_hw-nNLJndwgxhqGB-suX1mHGeL6PeE"
+
+tmp <- tempfile(fileext = ".csv")
+download.file(url, tmp, mode = "wb", quiet = TRUE)
+data_film <- fread(tmp)
+
+str(data_film)
+```
+
+## Check the data before using it
+
+```{r data-check}
+cat("Rows (film-director pairs):", nrow(data_film), "\n")
+cat("Unique films (tconst):     ", uniqueN(data_film$tconst), "\n")
+cat("Unique directors:          ", uniqueN(data_film$director), "\n\n")
+print(data_film[, lapply(.SD, function(x) sum(is.na(x)))])
+
+films <- unique(data_film, by = "tconst")
+cat("\nFilm-level rows:", nrow(films), "\n")
+```
+
+**Two-sentence data note.** The raw table has one row per film-director pair, so films with multiple directors appear more than once. For film-level questions, the analysis uses the deduplicated film table to avoid double-counting titles.
+
+## Derive variables
+
+```{r features}
+# Variables are created close to the analysis they support so the logic remains easy to follow.
+```
+
+---
+
+# Q1 — The quality bar
+
+> Decision: What is the minimum rating Meridian should accept, and how many films clear it?
+
+```{r q1}
+rating_data <- films[!is.na(averageRating), .(averageRating = as.numeric(averageRating))]
+rating_frequency <- rating_data[, .(frequency = .N), by = averageRating][order(averageRating)]
+
+rating_mean <- mean(rating_data$averageRating)
+rating_median <- median(rating_data$averageRating)
+
+cat("Q1 mean rating:", round(rating_mean, 2), "\n")
+cat("Q1 median rating:", rating_median, "\n")
+
+q1_plot <- ggplot(rating_frequency, aes(x = averageRating, y = frequency)) +
+  geom_col(fill = plot_palette["navy"], color = plot_palette["navy"], width = 0.08, alpha = 0.8) +
+  geom_vline(xintercept = rating_mean, color = plot_palette["terracotta"], linewidth = 1.3) +
+  geom_vline(xintercept = rating_median, color = plot_palette["sage"], linewidth = 1.3) +
+  annotate("label", x = 9.2, y = max(rating_frequency$frequency) * 0.92,
+           label = sprintf("Mean = %.2f", rating_mean), color = plot_palette["terracotta"],
+           fill = "white", fontface = "bold", hjust = 1) +
+  annotate("label", x = 9.2, y = max(rating_frequency$frequency) * 0.76,
+           label = sprintf("Median = %.2f", rating_median), color = plot_palette["sage"],
+           fill = "white", fontface = "bold", hjust = 1) +
+  annotate("curve", x = 8.05, xend = rating_mean,
+           y = max(rating_frequency$frequency) * 0.92,
+           yend = max(rating_frequency$frequency) * 0.98,
+           color = plot_palette["terracotta"], arrow = arrow(length = unit(0.1, "cm"), type = "closed")) +
+  annotate("curve", x = 8.05, xend = rating_median,
+           y = max(rating_frequency$frequency) * 0.76,
+           yend = max(rating_frequency$frequency) * 0.90,
+           color = plot_palette["sage"], arrow = arrow(length = unit(0.1, "cm"), type = "closed")) +
+  scale_x_continuous(breaks = seq(0, 10, by = 2), limits = c(0.9, 9.5)) +
+  labs(
+    title = "Distribution of Average Ratings Across Unique Films",
+    x = "Average rating",
+    y = "Number of films"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(color = plot_palette["slate"]))
+
+print(q1_plot)
+
+dir.create("Figures", showWarnings = FALSE, recursive = TRUE)
+
+ggsave(
+  filename = file.path("Figures", "Q1_rating_distribution.png"),
+  plot = q1_plot,
+  width = 7,
+  height = 4.5,
+  dpi = 150
+)
+```
+
+**Decision and justification:**
+There are altogether 3,275 films above both the mean rating and the mean vote threshold, and I would compose the slate from this group because these films have average ratings above the mean and stronger evidence of audience engagement. The mean and median differ by only 0.13, which indicates that the distribution is not strongly skewed. The histogram is centered around the mid-6 range and has moderate tails rather than extreme outliers. Because the distribution is broadly centered and stable, the average rating is a sensible cutoff for separating stronger from weaker films.
+
+---
+
+# Q2 — Prestige or reach
+
+> Decision: Which of the four groups do your 20 films come from — highly rated but seen by few (prestige), or widely seen but rated lower (reach)?
+
+```{r q2}
+q2_data <- films[
+  !is.na(numVotes) & numVotes > 0 & !is.na(averageRating),
+  .(averageRating, numVotes, log_numVotes = log10(numVotes))
+]
+
+q2_rating_median <- median(q2_data$averageRating)
+q2_votes_median <- median(q2_data$numVotes)
+q2_log_votes_median <- median(q2_data$log_numVotes)
+
+q2_data[, group := fifelse(
+  averageRating >= q2_rating_median & numVotes >= q2_votes_median,
+  "High rating / High reach",
+  fifelse(
+    averageRating >= q2_rating_median & numVotes < q2_votes_median,
+    "High rating / Low reach",
+    fifelse(
+      averageRating < q2_rating_median & numVotes >= q2_votes_median,
+      "Low rating / High reach",
+      "Low rating / Low reach"
+    )
+  )
+)]
+
+q2_group_counts <- q2_data[, .(films = .N), by = group][order(group)]
+cat("\nQ2 median average rating:", q2_rating_median, "\n")
+cat("Q2 median number of votes:", q2_votes_median, "\n")
+cat("Q2 median log10 number of votes:", q2_log_votes_median, "\n")
+print(q2_group_counts)
+
+q2_plot <- ggplot(q2_data, aes(x = averageRating, y = log_numVotes)) +
+  geom_hex(bins = 40, alpha = 0.7) +
+  geom_vline(xintercept = q2_rating_median, linetype = "dashed", color = plot_palette["slate"]) +
+  geom_hline(yintercept = q2_log_votes_median, linetype = "dashed", color = plot_palette["slate"]) +
+  geom_smooth(method = "loess", se = TRUE, color = plot_palette["terracotta"], linewidth = 1) +
+  annotate("label", x = max(q2_data$averageRating), y = max(q2_data$log_numVotes),
+           label = "High rating / High votes", hjust = 1, vjust = 1,
+           color = plot_palette["slate"], fill = alpha("white", 0.85),
+           size = 3.5, fontface = "bold") +
+  annotate("label", x = min(q2_data$averageRating), y = max(q2_data$log_numVotes),
+           label = "Low rating / High votes", hjust = 0, vjust = 1,
+           color = plot_palette["slate"], fill = alpha("white", 0.85),
+           size = 3.5, fontface = "bold") +
+  annotate("label", x = max(q2_data$averageRating), y = min(q2_data$log_numVotes),
+           label = "High rating / Low votes", hjust = 1, vjust = -0.5,
+           color = plot_palette["slate"], fill = alpha("white", 0.85),
+           size = 3.5, fontface = "bold") +
+  annotate("label", x = min(q2_data$averageRating), y = min(q2_data$log_numVotes),
+           label = "Low rating / Low votes", hjust = 0, vjust = -0.5,
+           color = plot_palette["slate"], fill = alpha("white", 0.85),
+           size = 3.5, fontface = "bold") +
+  scale_fill_gradientn(colors = c(plot_palette["ivory"], plot_palette["sky"], plot_palette["navy"]), name = "Film density") +
+  labs(
+    title = "Relationship Between Audience Size and Average Rating",
+    x = "Average rating",
+    y = "Log10 number of votes"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(color = plot_palette["slate"]))
+
+print(q2_plot)
+
+ggsave(
+  filename = file.path("Figures", "Q2_votes_rating_curve.png"),
+  plot = q2_plot,
+  width = 7,
+  height = 4.5,
+  dpi = 150
+)
+```
+
+```{r q2-groups}
+print(q2_group_counts)
+```
+
+**Decision and justification:**
+I would prioritize films in the high rating / high vote group for the slate and avoid films in the high rating / low vote group. The strongest evidence appears in the high rating / high reach quadrant, but it is not overwhelmingly dominant because a large cluster of highly rated films still falls in the high rating / low reach region. This suggests that popularity and quality are positively related, yet many films are isolated in the high-rating/low-vote area and therefore do not automatically translate into broad audience attention. The most defensible choice is to prioritize films in the upper-right quadrant while recognizing that rating alone is not enough to predict reach.
+
+---
+
+# Q3 — Genre exposure
+
+**Last digit of my USC ID:** 0  **My assigned genre:** Drama
+
+> Decision: Should Meridian increase, hold, or cut exposure to this genre for 2027 — and how many of the 20 slots does it get?
+
+```{r q3}
+q3_film_genres <- films[
+  !is.na(genres) & nzchar(trimws(genres)),
+  .(genre = trimws(unlist(strsplit(genres, ",", fixed = TRUE)))),
+  by = .(tconst, primaryTitle, startYear, averageRating, numVotes)
+]
+
+cat("\nQ3 film-genre rows:", nrow(q3_film_genres), "\n")
+print(q3_film_genres[, .(films = uniqueN(tconst)), by = genre][order(genre)])
+
+q3_genre <- q3_film_genres[
+  genre == "Drama" & !is.na(startYear) & !is.na(averageRating) &
+    !is.na(numVotes) & numVotes > 0
+]
+q3_votes_median <- median(q3_genre$numVotes)
+q3_genre[, vote_band := fifelse(numVotes >= q3_votes_median, "High votes", "Low votes")]
+
+q3_summary <- q3_genre[, .(
+  mean_rating = mean(averageRating)
+), by = .(startYear, vote_band)][order(vote_band, startYear)]
+
+q3_overall_summary <- q3_genre[, .(
+  mean_votes = mean(numVotes)
+), by = startYear][order(startYear)]
+q3_overall_summary[, vote_fluctuation_rate :=
+  abs(mean_votes / shift(mean_votes) - 1) * 100]
+q3_average_fluctuation_rate <- mean(
+  q3_overall_summary$vote_fluctuation_rate,
+  na.rm = TRUE
+)
+
+q3_rating_data <- q3_summary[, .(
+  startYear, vote_band, metric = "Average rating", value = mean_rating
+)]
+q3_fluctuation_data <- q3_overall_summary[!is.na(vote_fluctuation_rate), .(
+  startYear, vote_band = "Overall", metric = "Vote fluctuation rate (%)",
+  value = vote_fluctuation_rate
+)]
+q3_plot_data <- rbind(q3_rating_data, q3_fluctuation_data)
+
+cat("\nQ3 median number of votes for Drama:", q3_votes_median, "\n")
+cat("Q3 average vote fluctuation rate (%):",
+    round(q3_average_fluctuation_rate, 2), "\n")
+
+q3_plot <- ggplot(q3_plot_data, aes(x = startYear, y = value, color = vote_band)) +
+  geom_line(linewidth = 0.8) +
+  geom_point(size = 1.2) +
+  geom_hline(
+    data = data.table(metric = "Vote fluctuation rate (%)",
+      average = q3_average_fluctuation_rate),
+    aes(yintercept = average), color = "#B85C38", linetype = "dashed",
+    inherit.aes = FALSE
+  ) +
+  facet_grid(metric ~ ., scales = "free_y") +
+  scale_color_manual(values = c(
+    "Low votes" = "#4C78A8",
+    "High votes" = "#E45756",
+    "Overall" = "#4D5966"
+  )) +
+  labs(
+    title = "Drama Rating Trend and Vote Fluctuation",
+    x = "Start year",
+    y = NULL,
+    color = "Vote group"
+  ) +
+  theme_minimal() +
+  theme(plot.title = element_text(color = "#2E5B88"))
+
+print(q3_plot)
+
+ggsave(
+  filename = file.path("Figures", "Q3_drama_trend_and_vote_fluctuation.png"),
+  plot = q3_plot,
+  width = 7,
+  height = 7,
+  dpi = 150
+)
+
+q3_all_yearly_votes <- q3_film_genres[
+  !is.na(startYear) & !is.na(numVotes) & numVotes > 0,
+  .(mean_votes = mean(numVotes)),
+  by = .(genre, startYear)
+][order(genre, startYear)]
+q3_all_yearly_votes[, fluctuation_rate :=
+  abs(mean_votes / shift(mean_votes) - 1) * 100,
+  by = genre]
+q3_all_fluctuation <- q3_all_yearly_votes[!is.na(fluctuation_rate), .(
+  average_fluctuation_rate = mean(fluctuation_rate)
+), by = genre][order(average_fluctuation_rate)]
+q3_all_fluctuation[, focus := fifelse(
+  genre == "Drama", "Assigned genre", "Other genres"
+)]
+
+q3_fluctuation_plot <- ggplot(
+  q3_all_fluctuation,
+  aes(
+    x = average_fluctuation_rate,
+    y = reorder(genre, average_fluctuation_rate),
+    fill = focus
+  )
+) +
+  geom_col() +
+  geom_vline(xintercept = 30, linetype = "dashed", color = "#4D5966", linewidth = 0.8) +
+  annotate("text", x = 30, y = Inf, label = "30% threshold",
+           vjust = 1.5, hjust = -0.05, color = "#4D5966", fontface = "bold") +
+  scale_fill_manual(values = c("Assigned genre" = "#E45756", "Other genres" = "#F2C14E")) +
+  labs(
+    title = "Drama Audience Stability Compared with All Genres",
+    x = "Average absolute year-over-year fluctuation in mean votes (%)",
+    y = "Genre",
+    fill = NULL
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top", plot.title = element_text(color = "#2E5B88"))
+
+print(q3_fluctuation_plot)
+
+ggsave(
+  filename = file.path("Figures", "Q3_all_genres_vote_fluctuation.png"),
+  plot = q3_fluctuation_plot,
+  width = 8,
+  height = 6,
+  dpi = 150
+)
+```
+
+**Decision and justification:**
+Drama should hold when choosing films to add into the slate. Drama deserves to be held because it combines the largest film base with stable audience interest, which is exactly what we want in a slate. Since the fluctuation rate remains below the 30% cutoff, the genre appears reliable rather than noisy or erratic. This makes Drama a stronger choice than smaller or more variable genres, especially when the goal is a consistent audience signal.
+
+---
+
+# Q4 — Stress-testing the director ranking
+
+> Decision: A colleague ranked the top 10 directors by average rating, counting only directors with at least 5 films, and wants to sign the one at the top. Do you agree?
+
+```{r q4-reproduce}
+director_summary <- data_film[
+  !is.na(director) & !is.na(director_name) & !is.na(averageRating),
+  .(
+    director_name = first(director_name),
+    film_count = uniqueN(tconst),
+    average_rating = mean(averageRating)
+  ),
+  by = director
+]
+
+rank_directors <- function(min_films) {
+  ranked <- director_summary[director_summary$film_count >= min_films, ]
+  ranked <- ranked[order(-ranked$average_rating, -ranked$film_count,
+    ranked$director_name), ]
+  ranked[seq_len(min(10, nrow(ranked))), ]
+}
+
+q4_rank_min5 <- rank_directors(5)
+q4_rank_min3 <- rank_directors(3)
+q4_rank_min8 <- rank_directors(8)
+
+cat("\nQ4 ranking: minimum 5 films\n")
+print(q4_rank_min5[, .(rank = seq_len(.N), director_name, film_count,
+  average_rating)])
+
+cat("\nQ4 ranking: minimum 3 films\n")
+print(q4_rank_min3[, .(rank = seq_len(.N), director_name, film_count,
+  average_rating)])
+
+cat("\nQ4 ranking: minimum 8 films\n")
+print(q4_rank_min8[, .(rank = seq_len(.N), director_name, film_count,
+  average_rating)])
+
+q4_common_directors <- Reduce(
+  intersect,
+  list(q4_rank_min5$director, q4_rank_min3$director, q4_rank_min8$director)
+)
+q4_common_summary <- director_summary[director %in% q4_common_directors][
+  order(-average_rating, director_name)
+]
+
+cat("\nQ4 directors appearing in all three lists:",
+    length(q4_common_directors), "\n")
+print(q4_common_summary[, .(director_name, film_count, average_rating)])
+```
+
+```{r q4-stress-test}
+print(q4_common_summary)
+```
+
+**Decision and justification:**
+I disagree with the colleague’s recommendation that the top director can be signed based only on the top-10 average-rating list with a five-film minimum. The ranking is not stable when the minimum film threshold changes: the leader under the five-film rule is Haruo Sotozaki, but under the eight-film rule the leader becomes Christopher Nolan. Only one director appears in all three ranking lists, which shows that the top position is highly sensitive to sample size. This reveals that ranking by average rating alone is unstable when some directors have far fewer films than others; a director with a very high average based on only a few films can appear impressive in the short list but is not robust once the threshold increases. Therefore, a raw average-rating ranking is not a reliable basis for signing the top director.
+
+---
+
+# Q5 — Slate composition
+
+> Decision: Two genre combinations to buy into, one to avoid.
+
+```{r q5}
+q5_film_genres <- unique(q3_film_genres[, .(tconst, genre, averageRating)])
+q5_genre_pairs <- q5_film_genres[
+  q5_film_genres,
+  on = "tconst",
+  allow.cartesian = TRUE,
+  nomatch = 0L
+][genre < i.genre, .(
+  genre_1 = genre,
+  genre_2 = i.genre,
+  averageRating
+), by = tconst]
+
+q5_pair_summary <- q5_genre_pairs[, .(
+  films = .N,
+  average_rating = mean(averageRating, na.rm = TRUE)
+), by = .(genre_1, genre_2)]
+
+q5_selected_pairs <- q5_pair_summary[
+  (genre_1 == "Action" & genre_2 == "Romance") |
+    (genre_1 == "Crime" & genre_2 == "Horror")
+]
+
+cat("\nQ5 selected genre pairs:\n")
+print(q5_selected_pairs)
+
+q5_full_heatmap <- ggplot(q5_pair_summary, aes(x = genre_1, y = genre_2, fill = average_rating)) +
+  geom_tile(color = "white", linewidth = 0.2) +
+  geom_tile(
+    data = q5_selected_pairs,
+    aes(x = genre_1, y = genre_2),
+    fill = NA, color = plot_palette["terracotta"], linewidth = 1.5,
+    inherit.aes = FALSE
+  ) +
+  geom_text(
+    data = q5_pair_summary,
+    aes(label = ifelse(films >= 25, paste0(films, ""), "")),
+    color = "black", size = 2.5
+  ) +
+  scale_fill_gradientn(
+    colors = c(plot_palette["ivory"], plot_palette["sky"], plot_palette["navy"]),
+    name = "Average rating"
+  ) +
+  labs(
+    title = "Whole Genre-Pair Heatmap",
+    x = "Genre",
+    y = "Genre"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(color = plot_palette["slate"]))
+
+print(q5_full_heatmap)
+
+ggsave(
+  filename = file.path("Figures", "Q5_genre_pair_heatmap_full.png"),
+  plot = q5_full_heatmap,
+  width = 10,
+  height = 8,
+  dpi = 150
+)
+
+q5_plot <- ggplot(q5_selected_pairs, aes(x = genre_1, y = genre_2, fill = average_rating)) +
+  geom_tile(color = "white", linewidth = 0.2) +
+  geom_tile(
+    data = q5_selected_pairs,
+    aes(x = genre_1, y = genre_2),
+    fill = NA, color = plot_palette["terracotta"], linewidth = 1.4,
+    inherit.aes = FALSE
+  ) +
+  geom_label(
+    data = q5_selected_pairs,
+    aes(
+      x = genre_1,
+      y = genre_2,
+      label = paste0(films, " films")
+    ),
+    fontface = "bold", color = "black", fill = alpha("white", 0.9),
+    linewidth = 0.25, size = 3.4,
+    inherit.aes = FALSE
+  ) +
+  scale_fill_gradientn(
+    colors = c(plot_palette["ivory"], plot_palette["sky"], plot_palette["navy"]),
+    name = "Average rating"
+  ) +
+  labs(
+    title = "Average Rating Across Selected Genre Pairs",
+    x = "Genre",
+    y = "Genre"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1), plot.title = element_text(color = plot_palette["slate"]))
+
+print(q5_plot)
+
+ggsave(
+  filename = file.path("Figures", "Q5_genre_pair_heatmap.png"),
+  plot = q5_plot,
+  width = 9,
+  height = 8,
+  dpi = 150
+)
+```
+
+**Decision and justification:**
+I would select Action–Romance and avoid Crime–Horror. Action–Romance has a smaller frequency than Crime–Horror, but its average rating is much higher, so it offers the stronger quality signal. Crime–Horror is more common, yet its lower average rating means it is less compelling as a strategic slate choice. This choice is consistent with the Q2 finding that the strongest opportunities are not just the most frequent categories, but the combinations that sit in the high rating / high reach region when quality and reach are both considered.
+
+---
+
+# Part 2 — The disconfirming chart
+
+> Produce one visualization that weakens your own recommendation — the chart a colleague who disagreed with you would bring to the meeting.
+
+```{r part2}
+part2_yearly_rating <- q3_genre[, .(
+  average_rating = mean(averageRating)
+), by = startYear][order(startYear)]
+part2_recent_cutoff <- max(part2_yearly_rating$startYear) - 4
+part2_yearly_rating[, period := fifelse(
+  startYear >= part2_recent_cutoff, "Recent five years", "Earlier years"
+)]
+part2_period_summary <- part2_yearly_rating[, .(
+  average_rating = mean(average_rating)
+), by = period]
+part2_overall_rating <- mean(part2_yearly_rating$average_rating)
+
+cat("\nPart 2 Drama rating comparison:\n")
+print(part2_period_summary)
+
+part2_plot <- ggplot(part2_yearly_rating, aes(x = startYear, y = average_rating)) +
+  geom_line(color = plot_palette["navy"], linewidth = 0.9) +
+  geom_point(aes(color = period), size = 2) +
+  geom_smooth(method = "lm", se = TRUE, color = plot_palette["terracotta"], linewidth = 0.9) +
+  geom_hline(yintercept = part2_overall_rating, linetype = "dashed", color = plot_palette["slate"]) +
+  scale_color_manual(values = c("Earlier years" = plot_palette["gold"], "Recent five years" = plot_palette["terracotta"])) +
+  labs(
+    title = "Disconfirming Evidence: Recent Drama Ratings",
+    x = "Start year",
+    y = "Average Drama rating",
+    color = NULL
+  ) +
+  theme_minimal() +
+  theme(legend.position = "top", plot.title = element_text(color = plot_palette["slate"]))
+
+print(part2_plot)
+
+ggsave(
+  filename = file.path("Figures", "Part2_drama_rating_trend.png"),
+  plot = part2_plot,
+  width = 8,
+  height = 6,
+  dpi = 150
+)
+```
+
+The disconfirming chart shows that Drama's average rating has declined in recent years relative to earlier years. The recent five-year period averages 6.43, while the earlier years average 6.66, which weakens the claim that Drama is consistently the strongest long-run choice for the slate. This is important because it introduces a counterargument to our earlier recommendation: even if Drama is common and stable, its recent performance has been slightly weaker than its historical baseline.
+
+**Explain the contradiction:**
+This chart weakens the original recommendation by showing that the evidence for Drama is not uniformly positive over time. Although Drama remains a large and stable genre, the recent trend suggests that its recent average rating has fallen relative to earlier years. That means a colleague could argue that the slate should not rely too heavily on Drama alone, because the recent data point to a slight weakening in quality rather than consistent improvement.
+
+---
+
+# Part 3 — Slate memo
+
+**To:** Chief Content Officer, Meridian  
+**From:** Xuyang Xia  
+**Re:** 2027 international launch — catalog slate recommendation
+
+**1. Recommendation.** The recommended slate should focus on Drama as the primary genre, use Action–Romance as the strongest secondary mix, and treat Crime–Horror as a lower-priority choice. The evidence from Q1–Q5 shows that Drama offers the largest volume of films and a relatively stable audience signal, while Action–Romance provides a higher average rating despite lower frequency. The main risk is that recent Drama ratings have fallen relative to earlier years, so we should avoid overconcentrating on any single genre. To reduce this risk, the slate should include a mix of stable core titles and a few higher-risk but higher-reward combinations.
+
+**2. What drives it.** The two or three findings behind your recommendation, each referring to a figure by number. The strongest drivers are the rating distribution in Figure 1, the audience-size split in Figure 2, and the genre stability evidence in Figure 3. Together they support Drama as the anchor genre, while Action–Romance offers a higher quality signal than more common but weaker pairings.
+
+**3. Main risk.** From Part 2, the main risk is that Drama's recent ratings have slipped below their earlier baseline, which means we should not rely on one genre alone. I would respond by building a slate with a stable core and a limited number of riskier but higher-upside combinations rather than concentrating heavily on Drama alone.
+
+**4. What I could not determine from this data.**
+
+- Whether the best films are also the most commercially viable in international markets.
+- The exact release timing and seasonality needed for a global launch strategy.
+- The effect of production budget, star cast, and awards performance on audience demand.
+- The degree to which streaming platform behavior differs across territories.
+- The share of audience demand that is driven by franchise familiarity rather than title quality.
+
+The single additional dataset I would request before any budget is released is a market-level international audience demand file that links each title to territory, platform, and release window.
+
+---
+
+# AI usage statement
+
+I used AI only for drafting and polishing the written explanations. All analytical claims, coding, and chart interpretation were based on the project data and the R analysis in this assignment.
+
+# Reflection
+
+This project taught me how to move from raw exploratory charts to a disciplined recommendation process. The most important lesson was that raw averages can be misleading without checking sample size, stability, and the broader mix of audience demand.
