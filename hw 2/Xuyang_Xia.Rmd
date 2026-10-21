@@ -1,0 +1,526 @@
+---
+title: "MKT566 Homework 2 — International Slate Analysis"
+author: "Xuyang Xia — USC ID:1848938460"
+date: "Due October 8, 2026"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    toc_float:
+      collapsed: false
+    theme: flatly
+    highlight: tango
+    code_folding: show
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE,
+                      comment = "")   # print R output without the "##" prefix
+library(data.table)
+library(dplyr)
+library(modelsummary)   # or: library(stargazer)
+```
+
+```{css, echo=FALSE}
+/* Page layout and readability */
+.main-container { max-width: 1100px; }
+body { font-size: 15px; line-height: 1.6; }
+
+/* Section headings: clear breaks between questions */
+h1 { margin-top: 2.2em; padding-bottom: 0.25em; border-bottom: 2px solid #2c3e50; }
+h2 { margin-top: 1.6em; color: #2c3e50; }
+
+/* Tables: compact, readable, never wider than the page */
+table { margin: 1em 0 1.5em !important; font-size: 14px; }
+table th, table td { padding: 4px 12px !important; }
+.table, table { width: auto !important; }
+.tinytable, .table-responsive { display: block; overflow-x: auto; }
+
+/* Code and R output */
+pre { font-size: 13px; }
+pre:not(.r) { background-color: #f7f9fa; border-left: 3px solid #18bc9c; }
+```
+
+<!--
+Do not delete or rename the headings in this file. They match the grading rubric.
+The model formulas are given to you. Your answers about them are what is graded.
+-->
+
+# Introduction
+
+
+I work in the international division of a film studio that will make 10 films next year, and most of the studio's money now comes from outside the United States, so a film that does well at home but poorly abroad is worth less to us than its domestic numbers suggest. The decision is which genres those 10 films should be: the slate is fixed, so every slot given to one genre is taken from another, and no genre may get more than 4 slots. The recommendation must rest only on what the studio knows before a film is made (its genre, language, and timing), not on ratings, votes, or box office that exist only after release. To make it, I use the top 200 films by worldwide gross in each year from 2000 to 2024 to measure how much of each genre's revenue comes from abroad and how likely each genre is to earn more abroad than at home.
+
+# Data
+
+```{r load-data}
+DATA_URL <- "https://drive.google.com/uc?export=download&id=1K7yfbpdnpG-WUX5ptEEd8c62c18amqRs"
+df <- fread(DATA_URL)
+
+# Helper: print a few labeled numbers as a small two-column table
+show_values <- function(values) {
+  knitr::kable(
+    data.frame(Measure = names(values),
+               Value   = formatC(values, format = "fg", digits = 4, big.mark = ",")),
+    format = "html", table.attr = "class=\"table table-condensed\"",
+    row.names = FALSE, align = c("l", "r")
+  )
+}
+
+# Rows and missing values. Blank text cells are read as "" (not NA), so is.na() alone misses them.
+show_values(c(
+  "Rows (one per film)"                 = nrow(df),
+  "Missing rating"                      = sum(is.na(df$rating)),
+  "Missing genres (is.na() only)"       = sum(is.na(df$genres)),            # misses the blanks
+  "Missing genres (NA or blank)"        = sum(is.na(df$genres)   | df$genres   == ""),
+  "Missing language (NA or blank)"      = sum(is.na(df$language) | df$language == "")
+))
+```
+
+The dataset has 5,000 rows, one per film (the top 200 films by worldwide gross in each year from 2000 to 2024). 170 films are missing a rating, 170 are missing a language, and 178 have a blank genre field, which `is.na()` doesn't catch because blanks are read as empty strings.
+
+```{r derive}
+# --- Cleaning rule 1: drop films missing rating, genres, or language ---
+# Every regression uses these variables; dropping the films here keeps the
+# same films in every model instead of letting lm() drop them silently.
+# Blank text cells are read as "" (not NA), so check for both.
+n_start <- nrow(df)
+df <- df %>%
+  filter(!is.na(rating),
+         !is.na(genres)   & genres   != "",
+         !is.na(language) & language != "")
+n_rule1 <- nrow(df)
+
+# --- Cleaning rule 2: drop films with zero votes ---
+# Q3 uses log(vote_count); log(0) is -Inf and lm() stops with an error.
+df <- df %>% filter(vote_count != 0)
+n_rule2 <- nrow(df)
+
+show_values(c(
+  "Removed by rule 1 (missing rating, genres, or language)" = n_start - n_rule1,
+  "Removed by rule 2 (zero votes)"                          = n_rule1 - n_rule2,
+  "Films left after cleaning"                               = n_rule2
+))
+
+# --- The five new variables ---
+df <- df %>%
+  mutate(
+    foreign_share    = foreign / worldwide,               # share of revenue earned abroad (0 to 1)
+    foreign_dominant = as.integer(foreign > domestic),    # 1 if the film earned more abroad than at home
+    first_genre      = trimws(sub(",.*", "", genres)),    # text before the first comma
+    english          = as.integer(language == "en"),      # 1 if original language is English
+    log_domestic     = log(domestic)                      # -Inf when domestic = 0; those films are dropped in Q1
+  )
+
+# Keep the six most common first genres; group the rest as "Other".
+top6 <- names(sort(table(df$first_genre), decreasing = TRUE))[1:6]
+df <- df %>%
+  mutate(first_genre = ifelse(first_genre %in% top6, first_genre, "Other"),
+         first_genre = relevel(factor(first_genre), ref = "Comedy"))  # Comedy is the Q2 baseline
+
+table(df$first_genre)    # check the seven categories
+
+# Save the cleaned data (zero-domestic films still included) for the Q1 checks
+df_clean <- df
+```
+
+Dropping films with a missing rating, genre, or language removes 178 films (the films missing a rating or language are all among those with a blank genre), and dropping films with zero votes removes 21 more, leaving 4,801 films.
+
+# Q1. Two checks before any modeling
+
+## Check 1: how the three revenue columns fit together
+
+```{r q1a}
+# Compute domestic + foreign - worldwide. How many films are close to zero?
+# Uses df_clean (all 4,801 cleaned films) so re-running this chunk gives the same answers.
+gap <- df_clean$domestic + df_clean$foreign - df_clean$worldwide
+
+# Films that pass: the gap is within $1 (allows for rounding)
+show_values(c(
+  "Films checked"                         = length(gap),
+  "Films that pass (gap within 1 dollar)" = sum(abs(gap) <= 1),
+  "Share that pass"                       = mean(abs(gap) <= 1),
+  "Largest gap as a share of worldwide"   = max(abs(gap) / df_clean$worldwide)
+))
+
+# For the films that fail, how big is the gap in dollars?
+summary(abs(gap[abs(gap) > 1]))
+```
+
+**Answer:**
+Domestic plus foreign equals worldwide (within $1) for 4,749 of the 4,801 films (98.9%), and the remaining 52 films are off by at most about 1% of worldwide, so worldwide is essentially just domestic + foreign. A regression of worldwide on domestic would therefore show a large, highly significant coefficient and a high R-squared, but only because domestic is part of worldwide by construction. It tells us nothing about how films perform in the market, which is why the rest of this analysis uses foreign_share instead.
+
+## Check 2: the films with no US release
+
+```{r q1b}
+# Uses df_clean (all cleaned films) so re-running this chunk gives the same answers.
+no_us <- df_clean$domestic == 0
+
+# Drop the zero-domestic films; this is the sample for the rest of the assignment
+df <- df_clean %>% filter(domestic > 0)
+
+# 1. Films with no US release, 2. share foreign-dominant among them,
+# 3. share foreign-dominant among all films, then among films with domestic above zero
+show_values(c(
+  "Films with no US release (domestic = 0)"         = sum(no_us),
+  "Share foreign-dominant: films with no US release" = mean(df_clean$foreign_dominant[no_us]),
+  "Share foreign-dominant: all films"                = mean(df_clean$foreign_dominant),
+  "Share foreign-dominant: films with domestic > 0"  = mean(df_clean$foreign_dominant[!no_us]),
+  "Films in the final sample"                        = nrow(df)
+))
+
+# foreign_share and log_domestic for the films with no US release
+summary(df_clean$foreign_share[no_us])    # all (almost exactly) 1
+summary(df_clean$log_domestic[no_us])     # log(0) = -Inf
+```
+
+**Answers:**
+
+1. Films with no US release: 1061
+2. Share foreign-dominant among them, and why: 100% of the films with no domestic release are foreign-dominant because they earned all their revenue abroad.
+3. Foreign-dominant rate, all films vs. domestic > 0: 65.15% vs. 55.27%
+4. **My sample choice, and one reason:** I drop the 1,061 films with no US release and keep only films with domestic revenue above zero, which leaves 3,740 films for the rest of the analysis. For every one of the dropped films, foreign_share is 1 (100% of revenue earned abroad) by definition, apart from tiny rounding gaps (the lowest is 0.996), so keeping them would inflate the average foreign share and make the genres and languages common among them look like they travel better than they do. Their log_domestic is also log(0), which is minus infinity, so the Q3 regression could not even run with them included. These films are also not comparable to the studio's slate, which will open in US theaters.
+
+# Q2. Which genres travel
+
+```{r q2}
+# foreign_share ~ first_genre + english + year        (baseline genre: Comedy)
+# Comedy is already the baseline: it was set with relevel() in the derive chunk.
+model_a <- lm(foreign_share ~ first_genre + english + year, data = df)
+
+# Regression table with readable labels
+modelsummary(
+  list("(1) Foreign share" = model_a),
+  title = "Table 1. Regression 1 (OLS): foreign share on genre, language, and year",
+  coef_map = c(
+    "first_genreAction"    = "Action (vs. Comedy)",
+    "first_genreAdventure" = "Adventure (vs. Comedy)",
+    "first_genreAnimation" = "Animation (vs. Comedy)",
+    "first_genreDrama"     = "Drama (vs. Comedy)",
+    "first_genreHorror"    = "Horror (vs. Comedy)",
+    "first_genreOther"     = "Other genre (vs. Comedy)",
+    "english"              = "English-language film",
+    "year"                 = "Year of release",
+    "(Intercept)"          = "Constant"
+  ),
+  fmt   = 4,                            # 4 decimals so small coefficients (year) are visible
+  stars = TRUE,
+  gof_map = c("nobs", "r.squared")
+)
+
+# Coefficients in percentage points (foreign_share is 0-1, so x 100),
+# plus the year trend over the whole 2000-2024 period (year coefficient x 25)
+pp <- coef(model_a)[-1] * 100
+pp_table <- data.frame(
+  term = c("Action (vs. Comedy)", "Adventure (vs. Comedy)", "Animation (vs. Comedy)",
+           "Drama (vs. Comedy)", "Horror (vs. Comedy)", "Other genre (vs. Comedy)",
+           "English-language film", "Year of release (per year)",
+           "Year of release (x 25, 2000-2024)"),
+  pp   = c(pp, pp["year"] * 25)
+)
+
+knitr::kable(
+  format    = "html", table.attr = "class=\"table table-condensed\"",
+  pp_table,
+  digits    = 2,
+  row.names = FALSE,
+  col.names = c("Variable", "Effect on foreign share (percentage points)"),
+  caption   = "Table 1 (continued). Regression 1 coefficients in percentage points"
+)
+```
+
+**1. Genres above and below Comedy:**
+- Every genre earns a larger share of its money abroad than Comedy does; none earns less, so Comedy is the genre that travels worst. The largest gaps are Adventure, which earns about 16.8 percentage points more of its revenue abroad than Comedy, Animation (+14.5 points), and Action (+12.0 points), holding language and year fixed. Drama (+6.7) and Horror (+5.6) travel only slightly better than Comedy. (Table 1)
+
+**2. Size of the english coefficient vs. the genre coefficients:**
+- The english coefficient is -40.8 percentage points: an English-language film earns about 41 points less of its revenue abroad than a non-English film of the same genre and year. That is more than twice the largest genre gap (Adventure, +16.8 points). (Table 1) Language therefore matters more than genre for foreign share in this data, but most non-English films in it earn very little in the US, so this mostly says that a foreign-language film is almost entirely a foreign-market film, not that the studio should switch languages.
+
+**3. The year trend, multiplied by 25:**
+- The year coefficient is +0.54 percentage points per year (Table 1), so across 2000-2024 the foreign share of a typical film rose by about 13.6 percentage points (0.54 × 25), for the same genre and language. The international market has become steadily more important. The change is large enough to matter: it is bigger than the gap between Comedy and Action, and it means a slate decided today should weigh foreign performance more heavily than films from the early 2000s would suggest. It shifts all genres by the same amount, though, so it does not change which genres travel best.
+
+# Q3. Two models, and which one you can actually use
+
+```{r q3}
+# foreign_share ~ first_genre + english + year + rating + log(vote_count) + log_domestic
+model_b <- lm(foreign_share ~ first_genre + english + year +
+                rating + log(vote_count) + log_domestic, data = df)
+```
+
+```{r q3-table-models}
+# Side-by-side table of model_a and model_b, copied from the worked example above.
+# Genre rows added so the genre coefficients can be compared across the two models.
+modelsummary(
+  list("(1) Known before release" = model_a, "(2) Adding what we learn later" = model_b),
+  title = "Table 2. Regression 1 vs. Regression 2 (OLS): adding rating, vote count, and domestic box office",
+  coef_map = c(
+    "first_genreAction"    = "Action (vs. Comedy)",
+    "first_genreAdventure" = "Adventure (vs. Comedy)",
+    "first_genreAnimation" = "Animation (vs. Comedy)",
+    "first_genreDrama"     = "Drama (vs. Comedy)",
+    "first_genreHorror"    = "Horror (vs. Comedy)",
+    "first_genreOther"     = "Other genre (vs. Comedy)",
+    "english"              = "English-language film",
+    "year"                 = "Year of release",
+    "rating"               = "Audience rating",
+    "log(vote_count)"      = "log(Vote count)",
+    "log_domestic"         = "log(Domestic box office)"
+  ),
+  fmt   = 4,                            # 4 decimals so small coefficients (year) are visible
+  stars = TRUE,
+  gof_map = c("nobs", "r.squared")
+)
+```
+
+**1. Would the studio know each new variable before making the film?**
+
+None of the three new variables is known before the studio decides to make a film; all three are known only after release. (They appear only in Regression 2, Table 2.)
+
+- `rating`: **known after.** It is the average audience rating (1 to 10), and audiences can only rate a film after they have seen it.
+- `log(vote_count)`: **known after.** The number of people who rated the film builds up only after release.
+- `log_domestic`: **known after.** US and Canadian box office exists only once the film is in theaters.
+
+**2. Why `domestic` on the right-hand side is a different kind of problem:**
+
+- The coefficient on log_domestic is -0.076 (Regression 2, Table 2): a film that earns twice as much in the US has, on average, a foreign share about 5 percentage points lower (0.076 × log 2 ≈ 0.05). But foreign_share is foreign / (domestic + foreign), so a higher domestic gross lowers the share automatically, even if foreign revenue does not change at all. Much of this negative coefficient is therefore built in by how the outcome is defined, and I cannot read it as "films that earn more at home travel less." In fact, the genres that travel best also earn the most at home (Table 8).
+
+**3. Genre coefficient in both models:**
+
+- The genre with the largest coefficient in Regression 1 is Adventure: +16.85 percentage points more of its revenue abroad than Comedy. In Regression 2 it falls to +12.90 points (Table 2). Most genre advantages shrink in the same way (Action from +12.0 to +7.9; Horror from +5.6 to +0.6, which is no longer significant). So the second model makes Adventure's advantage look smaller, because part of what makes a genre travel, such as drawing a large global audience that leaves many ratings, is now absorbed by the after-release variables.
+
+**4. The model I will use, and why:**
+
+- I will use Regression 1, the model with only genre, language, and year. Regression 2 has a higher R-squared (0.59 vs. 0.40, Table 2), but it gets that extra fit from ratings, votes, and domestic box office that do not exist for a film we have not made yet, and part of its fit comes from domestic being built into the outcome. A higher R-squared does not make it more useful for this decision: only Regression 1 can be applied when the slate is chosen.
+
+# Q4. From a probability to a decision
+
+```{r q4}
+# foreign_dominant ~ first_genre + english + year        (logistic)
+# Report ODDS RATIOS as well as coefficients.
+# Same sample and baseline (Comedy) as Q2; only variables known before release.
+model_c <- glm(foreign_dominant ~ first_genre + english + year,
+               data = df, family = binomial)
+
+# Table: coefficients (log-odds) next to odds ratios (exp of the coefficients)
+modelsummary(
+  list("(3) Coefficient (log-odds)" = model_c, "(3) Odds ratio" = model_c),
+  title = "Table 3. Regression 3 (logit): probability of earning more abroad than at home",
+  exponentiate = c(FALSE, TRUE),
+  coef_map = c(
+    "first_genreAction"    = "Action (vs. Comedy)",
+    "first_genreAdventure" = "Adventure (vs. Comedy)",
+    "first_genreAnimation" = "Animation (vs. Comedy)",
+    "first_genreDrama"     = "Drama (vs. Comedy)",
+    "first_genreHorror"    = "Horror (vs. Comedy)",
+    "first_genreOther"     = "Other genre (vs. Comedy)",
+    "english"              = "English-language film",
+    "year"                 = "Year of release"
+  ),
+  stars = TRUE,
+  gof_map = c("nobs", "logLik")
+)
+
+
+# --- From odds to probability ---
+# Predicted probability that a film earns more abroad than at home, by genre,
+# for an English-language film released in 2024 (the kind of film the studio will make).
+genre_probs <- data.frame(
+  first_genre = factor(levels(df$first_genre), levels = levels(df$first_genre)),
+  english     = 1,
+  year        = 2024
+)
+genre_probs$odds_ratio  <- exp(c(0, coef(model_c)[paste0("first_genre", levels(df$first_genre)[-1])]))  # Comedy = 1
+genre_probs$probability <- predict(model_c, newdata = genre_probs, type = "response")
+
+knitr::kable(
+  format    = "html", table.attr = "class=\"table table-condensed\"",
+  genre_probs[order(-genre_probs$probability), c("first_genre", "odds_ratio", "probability")],
+  digits    = 2,
+  row.names = FALSE,
+  col.names = c("Genre", "Odds ratio (vs. Comedy)",
+                "Probability of earning more abroad"),
+  caption   = "Table 4. Predicted probability of earning more abroad, by genre (from Regression 3), for an English-language film with the year set to 2024"
+)
+
+# --- Accuracy: model vs. always predicting the more common outcome ---
+pred_prob  <- predict(model_c, type = "response")   # predicted probability for each film
+pred_class <- as.integer(pred_prob > 0.5)            # 0.5 cutoff
+
+# Accuracy for a group of films: guessing the majority outcome vs. the model
+accuracy_row <- function(keep, label) {
+  actual   <- df$foreign_dominant[keep]
+  share    <- mean(actual)
+  baseline <- max(share, 1 - share)                  # right this often by always guessing the majority
+  model    <- mean(pred_class[keep] == actual)
+  data.frame(films = label, n = sum(keep), baseline = baseline, model = model,
+             gain = model - baseline)
+}
+
+accuracy_table <- rbind(
+  accuracy_row(rep(TRUE, nrow(df)), "All films"),
+  accuracy_row(df$english == 1,     "English-language films only")   # the kind the studio makes
+)
+
+knitr::kable(
+  format    = "html", table.attr = "class=\"table table-condensed\"",
+  accuracy_table,
+  digits    = 3,
+  col.names = c("Films", "N", "Always guess majority", "Model (0.5 cutoff)", "Gain"),
+  caption   = "Table 5. Accuracy of Regression 3 vs. always guessing the more common outcome"
+)
+
+# Confusion table at 0.5: where the model is right and the two kinds of mistake
+confusion <- table(pred_class, df$foreign_dominant)
+knitr::kable(
+  format    = "html", table.attr = "class=\"table table-condensed\"",
+  matrix(confusion, nrow = 2,
+         dimnames = list(c("Predicted: does not travel", "Predicted: travels"),
+                         c("Actually did not travel", "Actually travelled"))),
+  caption = "Table 6. Confusion table for Regression 3 at a 0.5 cutoff"
+)
+
+# The two mistakes at different thresholds
+# wasted = campaign paid for a film that did not travel; missed = no campaign for a film that did
+threshold_table <- do.call(rbind, lapply(c(0.3, 0.4, 0.5, 0.6), function(th) {
+  pred <- as.integer(pred_prob > th)
+  data.frame(threshold = th,
+             campaigns = sum(pred == 1),
+             wasted    = sum(pred == 1 & df$foreign_dominant == 0),
+             missed    = sum(pred == 0 & df$foreign_dominant == 1),
+             accuracy  = mean(pred == df$foreign_dominant))
+}))
+
+knitr::kable(
+  format    = "html", table.attr = "class=\"table table-condensed\"",
+  threshold_table,
+  digits    = 3,
+  col.names = c("Threshold", "Campaigns funded", "Wasted (did not travel)",
+                "Missed (travelled, no campaign)", "Accuracy"),
+  caption   = "Table 7. Wasted campaigns and missed films at different thresholds (Regression 3)"
+)
+
+# What is at stake when a film that travels is missed: its foreign box office
+travelled_en <- df$english == 1 & df$foreign_dominant == 1
+show_values(c(
+  "English-language films that earned more abroad"         = sum(travelled_en),
+  "Their median foreign box office (USD millions)"          = median(df$foreign[travelled_en]) / 1e6
+))
+```
+
+**Which variables raise and lower the odds:**
+
+- **Raise the odds:** every genre has higher odds than Comedy of earning more abroad than at home. Adventure has about 6.0 times Comedy's odds, Animation 5.3 times, and Action 3.2 times; Other (2.5), Drama (2.0), and Horror (1.4) have smaller advantages. Each later year of release raises the odds by about 5% (odds ratio 1.05), so over 25 years the odds rise about 3.3 times (1.05^25). (Regression 3, Table 3)
+- **Lower the odds:** being an English-language film cuts the odds by about 96% (odds ratio 0.04) compared with a non-English film of the same genre and year, the largest effect in the model. (Table 3)
+
+**1. Model accuracy vs. always predicting the more common outcome:**
+
+- Always predicting the more common outcome is right 55.3% of the time. (Table 5)
+- My model is right 68.8% of the time. (Regression 3, Table 5)
+- Is the gap worth it? Yes, but modestly. Overall, the model is right 13.5 percentage points more often than guessing and makes about 30% fewer mistakes. However, almost all non-English films earn more abroad, so they are easy to call; for English-language films, the kind the studio makes, the model is right 63.9% of the time versus 52.1% for guessing. (Table 5) That 12-point gain comes from genre and year, which the studio knows before making a film, so the model is worth using to rank genres, but it is still wrong about one time in three and should guide the slate rather than decide it.
+
+**2. My threshold is 0.4, because:**
+
+- **What each mistake costs.** Paying for a campaign on a film that does not travel wastes the campaign budget. Not supporting a film that would have travelled loses foreign revenue, and that revenue is large: English-language films that earned more abroad than at home took a median of about $81.5M overseas (Q4 output, last table).
+- **Which mistake worries me more.** Missing a film that would have travelled. Most of the studio's money now comes from abroad, and the foreign revenue at stake on a film that travels is likely larger than the cost of one campaign. This is an assumption, because the data has no marketing costs.
+- **How 0.4 reflects that.** A campaign is worth paying for when the chance a film travels, times the revenue lost by missing it, is larger than the chance it does not travel, times the campaign cost. A threshold of 0.5 would treat the two mistakes as equally costly. A threshold of 0.4 funds a film once its chance of travelling reaches 40%, which is the right cutoff if a missed film costs at least 1.5 times as much as a wasted campaign (0.6 ÷ 0.4). Given the revenue at stake, I think that is a cautious assumption.
+- **What this choice costs (Tables 6 and 7).** Moving from 0.5 to 0.4 cuts missed films from 628 to 316, so the studio supports about 85% of the films that actually travel instead of 70%. The price is more wasted campaigns, 966 instead of 539, and only about 64% of funded films travel instead of 73%. I stop at 0.4: at 0.3, 3,285 of 3,740 films would get a campaign and the model would barely separate films at all.
+- **What it means for next year.** Foreign share has risen over time, so for an English-language film with the year set to 2024, every genre's predicted chance of travelling is above 0.4 (Table 4; the lowest is Comedy at 0.45). In practice, this threshold funds a campaign for all ten films in the slate, and the studio should budget for ten campaigns.
+
+# Q5. The slate
+
+```{r q5}
+# Correlation between log_domestic and foreign_share.
+cor(df$log_domestic, df$foreign_share)
+
+# Average domestic revenue by first_genre (in $ millions), next to how well each genre travels
+genre_summary <- df %>%
+  group_by(first_genre) %>%
+  summarise(
+    films                 = n(),
+    avg_domestic_m        = mean(domestic) / 1e6,     # average US + Canada box office
+    avg_foreign_m         = mean(foreign) / 1e6,      # average box office everywhere else
+    avg_worldwide_m       = mean(worldwide) / 1e6,
+    avg_foreign_share     = mean(foreign_share),
+    share_foreign_dominant = mean(foreign_dominant)
+  ) %>%
+  arrange(desc(avg_foreign_share))
+
+knitr::kable(
+  format    = "html", table.attr = "class=\"table table-condensed\"",
+  genre_summary,
+  digits    = 2,
+  col.names = c("Genre", "Films", "Avg. domestic (USD M)", "Avg. foreign (USD M)",
+                "Avg. worldwide (USD M)", "Avg. foreign share", "Share foreign-dominant"),
+  caption   = "Table 8. Box office and foreign share by genre (descriptive averages)"
+)
+
+# Model A's predicted foreign share for each genre, for an English-language film in 2024
+# (model_a is the model chosen in Q3: it uses only what is known before release)
+slate_pred <- data.frame(
+  first_genre = factor(levels(df$first_genre), levels = levels(df$first_genre)),
+  english     = 1,
+  year        = 2024
+)
+slate_pred$pred_foreign_share <- predict(model_a, newdata = slate_pred)
+
+knitr::kable(
+  format    = "html", table.attr = "class=\"table table-condensed\"",
+  slate_pred[order(-slate_pred$pred_foreign_share), c("first_genre", "pred_foreign_share")],
+  digits    = 3,
+  row.names = FALSE,
+  col.names = c("Genre", "Predicted foreign share"),
+  caption   = "Table 9. Predicted foreign share by genre (from Regression 1, the model chosen in Q3), for an English-language film with the year set to 2024"
+)
+```
+
+**What the correlation means:**
+
+- The correlation between log_domestic and foreign_share is -0.49 (first line of the Q5 output): films that earn more in the US tend to earn a smaller share of their revenue abroad, but part of this is built in, because domestic revenue is part of worldwide, the denominator of foreign_share.
+- Across genres, the pattern runs the other way. The genres that travel best also earn more at home, not less: Adventure averages about $118M in the US, Animation $97M, and Action $78M, compared with $47M for Comedy, $43M for Horror, and $35M for Drama. (Table 8) So at the genre level there is no trade-off between the home market and the foreign market.
+
+**My slate:**
+
+| Genre | Slots |
+| --- | --- |
+| Adventure | 3 |
+| Animation | 3 |
+| Action | 3 |
+| Drama | 1 |
+| Comedy | 0 |
+| Horror | 0 |
+| **Total** | **10** |
+
+**Explanation (4-5 sentences), including the genre I am giving up:**
+I use Regression 1, the model chosen in Q3, which relies only on what the studio knows before making a film; for an English-language film, with the year set to 2024 (the latest year in the data), it predicts the highest foreign shares for Adventure (62.8%), Animation (60.4%), and Action (57.9%) (Regression 1, Table 9), so these three genres get nine of the ten slots, and the same three have the highest odds of earning more abroad than at home in the Q4 model (Regression 3, Table 3). I spread those nine slots evenly (3-3-3) instead of giving any genre the maximum of 4, so that one weak year for a single genre does not sink the slate. The last slot goes to Drama (52.6% predicted foreign share, Table 9), which adds variety to the slate; "Other" ranks slightly higher (55.7%), but it is a mix of many small genres rather than a genre the studio can commission, so Drama is the best remaining choice ahead of Horror (51.5%) and Comedy (45.9%). The genres I am giving up are Comedy and Horror, which have the two lowest predicted foreign shares (45.9% and 51.5%, Table 9) and the two lowest odds of earning more abroad (Table 3); Comedy is the bigger sacrifice, because it is one of the two most common genres in the data. The cost is real: Comedy and Horror still average about $47M and $43M at home (Table 8), and they are usually much cheaper to make than Adventure, Animation, or Action (an assumption, since the data has no budgets), so I may be giving up the most profitable films per dollar and putting nine of ten slots into expensive spectacle whose results depend on a few big releases.
+
+# Memo
+
+<!-- Half a page. Recommendation in the first sentence. No code, no jargon. -->
+
+**To:** Head of International\
+**From:** Xuyang Xia\
+**Re:** Genre mix for the 10-film slate
+
+**Recommendation.** Next year's 10 films should be 3 Adventure, 3 Animation, 3 Action, and 1 Drama, with no Comedy and no Horror.
+
+**Why.** Two findings from 3,740 hit films released in 2000–2024:
+
+1. *These three genres earn the largest share of their money abroad.* Compared with comedies in the same language and year, Adventure films earn about 17 percentage points more of their revenue outside the US, Animation 14 points, and Action 12 points (Regression 1, Table 1). An English-language film in these genres today earns roughly 58–63% of its revenue abroad, against 46% for a comedy (Table 9). They also earn more at home, not less (Table 8).
+2. *They are the most likely to earn more abroad than at home:* about an 83% chance for Adventure, 81% for Animation, and 72% for Action, against 45% for a comedy (Regression 3, Table 4).
+
+**Biggest risk.** These are usually the most expensive genres to make, and the slate puts nine of ten films into them. If their costs run high, the slate that earns the most at the box office could earn the least profit.
+
+**What this data does not tell us.**
+
+- *Costs:* there are no budgets, so I can compare revenue across genres but not profit, and the studio is choosing on profit.
+- *Failures:* the file covers only each year's top 200 films, so I see how well each genre's hits travel, not how often each genre flops.
+- *Which countries:* "foreign" is one number for every market outside the US and Canada, so I cannot tell whether a genre depends on one or two large markets.
+
+**Data I would ask for:** production and marketing budgets for every wide release from 2000 to 2024, including films outside the top 200, to compare profit and failure rates by genre.
+
+
+# AI usage statement
+
+I used Claude (Anthropic's Claude Code assistant, inside VS Code) throughout this homework. The full conversation is submitted as a separate file, together with `Xuyang_Xia_AIlog.md`, which lists each of my requests in order and the mistakes we found and fixed.
+
+Claude wrote and debugged the R code, explained the output, and drafted or revised the written answers: the Introduction, the Data sentences, the Q1–Q5 answers (including the 0.4 threshold and the slate it proposed), and the memo. I ran the code and questioned results that looked wrong, which led to several fixes recorded in the log. Every number in the text was checked against the knitted R output.

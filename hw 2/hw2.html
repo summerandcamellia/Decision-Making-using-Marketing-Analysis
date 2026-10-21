@@ -1,0 +1,527 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang xml:lang>
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>MKT566 Homework 2</title>
+  <style>
+    html {
+      line-height: 1.5;
+      font-family: Georgia, serif;
+      font-size: 20px;
+      color: #1a1a1a;
+      background-color: #fdfdfd;
+    }
+    body {
+      margin: 0 auto;
+      max-width: 36em;
+      padding-left: 50px;
+      padding-right: 50px;
+      padding-top: 50px;
+      padding-bottom: 50px;
+      hyphens: auto;
+      word-wrap: break-word;
+      text-rendering: optimizeLegibility;
+      font-kerning: normal;
+    }
+    @media (max-width: 600px) {
+      body {
+        font-size: 0.9em;
+        padding: 1em;
+      }
+    }
+    @media print {
+      body {
+        background-color: transparent;
+        color: black;
+        font-size: 12pt;
+      }
+      p, h2, h3 {
+        orphans: 3;
+        widows: 3;
+      }
+      h2, h3, h4 {
+        page-break-after: avoid;
+      }
+    }
+    p {
+      margin: 1em 0;
+    }
+    a {
+      color: #1a1a1a;
+    }
+    a:visited {
+      color: #1a1a1a;
+    }
+    img {
+      max-width: 100%;
+    }
+    h1, h2, h3, h4, h5, h6 {
+      margin-top: 1.4em;
+    }
+    h5, h6 {
+      font-size: 1em;
+      font-style: italic;
+    }
+    h6 {
+      font-weight: normal;
+    }
+    ol, ul {
+      padding-left: 1.7em;
+      margin-top: 1em;
+    }
+    li > ol, li > ul {
+      margin-top: 0;
+    }
+    blockquote {
+      margin: 1em 0 1em 1.7em;
+      padding-left: 1em;
+      border-left: 2px solid #e6e6e6;
+      color: #606060;
+    }
+    code {
+      font-family: Menlo, Monaco, 'Lucida Console', Consolas, monospace;
+      font-size: 85%;
+      margin: 0;
+    }
+    pre {
+      margin: 1em 0;
+      overflow: auto;
+    }
+    pre code {
+      padding: 0;
+      overflow: visible;
+    }
+    .sourceCode {
+     background-color: transparent;
+     overflow: visible;
+    }
+    hr {
+      background-color: #1a1a1a;
+      border: none;
+      height: 1px;
+      margin: 1em 0;
+    }
+    table {
+      margin: 1em 0;
+      border-collapse: collapse;
+      width: 100%;
+      overflow-x: auto;
+      display: block;
+      font-variant-numeric: lining-nums tabular-nums;
+    }
+    table caption {
+      margin-bottom: 0.75em;
+    }
+    tbody {
+      margin-top: 0.5em;
+      border-top: 1px solid #1a1a1a;
+      border-bottom: 1px solid #1a1a1a;
+    }
+    th {
+      border-top: 1px solid #1a1a1a;
+      padding: 0.25em 0.5em 0.25em 0.5em;
+    }
+    td {
+      padding: 0.125em 0.5em 0.25em 0.5em;
+    }
+    header {
+      margin-bottom: 4em;
+      text-align: center;
+    }
+    #TOC li {
+      list-style: none;
+    }
+    #TOC a:not(:hover) {
+      text-decoration: none;
+    }
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+    pre > code.sourceCode { white-space: pre; position: relative; }
+    pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+    pre > code.sourceCode > span:empty { height: 1.2em; }
+    .sourceCode { overflow: visible; }
+    code.sourceCode > span { color: inherit; text-decoration: inherit; }
+    div.sourceCode { margin: 1em 0; }
+    pre.sourceCode { margin: 0; }
+    @media screen {
+    div.sourceCode { overflow: auto; }
+    }
+    @media print {
+    pre > code.sourceCode { white-space: pre-wrap; }
+    pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+    }
+    pre.numberSource code
+      { counter-reset: source-line 0; }
+    pre.numberSource code > span
+      { position: relative; left: -4em; counter-increment: source-line; }
+    pre.numberSource code > span > a:first-child::before
+      { content: counter(source-line);
+        position: relative; left: -1em; text-align: right; vertical-align: baseline;
+        border: none; display: inline-block;
+        -webkit-touch-callout: none; -webkit-user-select: none;
+        -khtml-user-select: none; -moz-user-select: none;
+        -ms-user-select: none; user-select: none;
+        padding: 0 4px; width: 4em;
+        color: #aaaaaa;
+      }
+    pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+    div.sourceCode
+      {   }
+    @media screen {
+    pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+    }
+    code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+    code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+    code span.at { color: #7d9029; } /* Attribute */
+    code span.bn { color: #40a070; } /* BaseN */
+    code span.bu { } /* BuiltIn */
+    code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+    code span.ch { color: #4070a0; } /* Char */
+    code span.cn { color: #880000; } /* Constant */
+    code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+    code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+    code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+    code span.dt { color: #902000; } /* DataType */
+    code span.dv { color: #40a070; } /* DecVal */
+    code span.er { color: #ff0000; font-weight: bold; } /* Error */
+    code span.ex { } /* Extension */
+    code span.fl { color: #40a070; } /* Float */
+    code span.fu { color: #06287e; } /* Function */
+    code span.im { } /* Import */
+    code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+    code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+    code span.op { color: #666666; } /* Operator */
+    code span.ot { color: #007020; } /* Other */
+    code span.pp { color: #bc7a00; } /* Preprocessor */
+    code span.sc { color: #4070a0; } /* SpecialChar */
+    code span.ss { color: #bb6688; } /* SpecialString */
+    code span.st { color: #4070a0; } /* String */
+    code span.va { color: #19177c; } /* Variable */
+    code span.vs { color: #4070a0; } /* VerbatimString */
+    code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">MKT566 Homework 2</h1>
+</header>
+<h1 id="mkt566-homework-2">MKT566: Homework 2</h1>
+<p><strong>Instructor</strong>: Davide Proserpio (proserpi@marshall.usc.edu)</p>
+<p><strong>Teaching Assistant</strong>: Raghav Sarmukaddam (sarmukad@usc.edu)</p>
+<p><strong>Due Date</strong>: October 8, 2026</p>
+<h2 id="context">Context</h2>
+<p>You work in the international division of a film studio. The studio will make <strong>10 films</strong> next year. Your head of international has asked you to recommend which genres those 10 films should be.</p>
+<p>She has told you three things:</p>
+<ol type="1">
+<li><strong>Most of the studio’s money now comes from outside the United States.</strong> A film that does well at home and badly abroad is a weaker film for this studio than its domestic numbers suggest.</li>
+<li><strong>The slate is fixed at 10 films.</strong> Every slot you give to one genre is a slot you take from another. “Make more films that travel well” is not a recommendation.</li>
+<li><strong>She will ask which numbers you used.</strong> A film that has not been made yet has no audience rating and no vote count. She will not approve a slate built on numbers that only exist after release.</li>
+</ol>
+<p>You will use box office data for films released between 2000 and 2024. The data tells you what each film earned at home and abroad, how it was rated, what language it was made in, and its genres. It does not tell you what any film cost to make or to market.</p>
+<p>This homework gives you the regressions to run. What it does not give you is the judgment: which model to trust, which films to include, and what to recommend. That is where the points are.</p>
+<h3 id="timeline"><strong>Timeline</strong></h3>
+<p>The assignment is released on <strong>Thursday, September 17, 2026</strong>. It is due on <strong>Thursday, October 8, 2026</strong>.</p>
+<p>Submit through Brightspace by <strong>11:59 PM Pacific Time on October 8, 2026</strong>. Late submissions follow the course late policy (see the syllabus).</p>
+<h2 id="learning-objectives"><strong>Learning objectives</strong></h2>
+<p>By completing this homework, you will:</p>
+<ol type="1">
+<li><strong>Read OLS and logit coefficients in business terms</strong>: say what a coefficient means for a decision, not just whether it is positive and significant.</li>
+<li><strong>Spot when two variables are related by construction</strong>, because one is part of the other, and why such a regression tells you nothing.</li>
+<li><strong>Separate what the studio knows before a film is made from what it learns after</strong>, and see why a better-fitting model can be the wrong one to decide with.</li>
+<li><strong>Turn a model into a decision</strong>: pick a probability threshold, and recommend a slate with specific numbers.</li>
+<li><strong>Produce reproducible work</strong>: a notebook with all your code, clean regression tables, a short memo, and a log of any AI assistance.</li>
+</ol>
+<h2 id="dataset"><strong>Dataset</strong></h2>
+<h3 id="how-to-load-the-data">How to load the data</h3>
+<p>Read the file <strong>directly from this link</strong>. Do not use a downloaded file from your own machine:</p>
+<pre><code>https://drive.google.com/uc?export=download&amp;id=1K7yfbpdnpG-WUX5ptEEd8c62c18amqRs</code></pre>
+<p>In R:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="fu">library</span>(data.table)</span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a>dt <span class="ot">&lt;-</span> <span class="fu">fread</span>(<span class="st">&quot;https://drive.google.com/uc?export=download&amp;id=1K7yfbpdnpG-WUX5ptEEd8c62c18amqRs&quot;</span>)</span></code></pre></div>
+<p>In Python:</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode python"><code class="sourceCode python"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="im">import</span> pandas <span class="im">as</span> pd</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>df <span class="op">=</span> pd.read_csv(<span class="st">&quot;https://drive.google.com/uc?export=download&amp;id=1K7yfbpdnpG-WUX5ptEEd8c62c18amqRs&quot;</span>)</span></code></pre></div>
+<p>Your notebook must run on a computer that is not yours. Code that reads a file from your own folders will fail when the TA runs it, and you will lose the reproducibility points.</p>
+<p><em>If the link does not work, contact the TA as soon as possible. Do not download the file and point to a local path instead.</em></p>
+<h3 id="what-the-file-contains">What the file contains</h3>
+<p>Each row is one film. The file contains the <strong>200 highest-grossing films of each year</strong> from 2000 to 2024. Keep this in mind: every film in this list did well. There are no failures in it.</p>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Column</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>title</code></td>
+<td>text</td>
+<td>Film title.</td>
+</tr>
+<tr class="even">
+<td><code>year</code></td>
+<td>integer</td>
+<td>Year of release, 2000 to 2024.</td>
+</tr>
+<tr class="odd">
+<td><code>rank_in_year</code></td>
+<td>integer</td>
+<td>Worldwide box office rank within its release year, 1 to 200.</td>
+</tr>
+<tr class="even">
+<td><code>worldwide</code></td>
+<td>number</td>
+<td>Total worldwide box office, in US dollars.</td>
+</tr>
+<tr class="odd">
+<td><code>domestic</code></td>
+<td>number</td>
+<td>Box office in the United States and Canada, in US dollars.</td>
+</tr>
+<tr class="even">
+<td><code>foreign</code></td>
+<td>number</td>
+<td>Box office everywhere else, in US dollars.</td>
+</tr>
+<tr class="odd">
+<td><code>rating</code></td>
+<td>number</td>
+<td>Average audience rating, 1 to 10. Missing for some films.</td>
+</tr>
+<tr class="even">
+<td><code>vote_count</code></td>
+<td>integer</td>
+<td>Number of users who rated the film.</td>
+</tr>
+<tr class="odd">
+<td><code>language</code></td>
+<td>text</td>
+<td>Original language, as a two-letter code (<code>en</code> is English).</td>
+</tr>
+<tr class="even">
+<td><code>genres</code></td>
+<td>text</td>
+<td>Genres for the film, separated by commas. Missing for some films.</td>
+</tr>
+<tr class="odd">
+<td><code>production_countries</code></td>
+<td>text</td>
+<td>Countries involved in production, separated by commas.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="required-cleaning-and-new-variables">Required cleaning and new variables</h3>
+<p>Report the number of rows, and how many films are missing <code>rating</code>, <code>genres</code>, and <code>language</code>. Two sentences.</p>
+<p>Then apply two rules, and say in one sentence how many films each one removes:</p>
+<ul>
+<li>Drop films with a missing <code>rating</code>, <code>genres</code>, or <code>language</code>. Every regression below uses these variables, and R would drop these films silently anyway; dropping them yourself keeps the same films in every model.</li>
+<li>Drop films with zero votes (<code>vote_count</code> equal to 0). Q3 takes the log of <code>vote_count</code>, and the log of zero does not exist: R turns it into minus infinity and <code>lm()</code> stops with an error.</li>
+</ul>
+<p>Then create these five variables. You will use them throughout:</p>
+<table>
+<colgroup>
+<col style="width: 50%" />
+<col style="width: 50%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Variable</th>
+<th>How to build it</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><code>foreign_share</code></td>
+<td><code>foreign</code> divided by <code>worldwide</code>. A number between 0 and 1. This is your main outcome.</td>
+</tr>
+<tr class="even">
+<td><code>foreign_dominant</code></td>
+<td>1 if <code>foreign</code> is greater than <code>domestic</code>, 0 otherwise.</td>
+</tr>
+<tr class="odd">
+<td><code>first_genre</code></td>
+<td>The first genre listed for each film. Keep the six most common as their own categories and group everything else as <code>Other</code>.</td>
+</tr>
+<tr class="even">
+<td><code>english</code></td>
+<td>1 if <code>language</code> is <code>en</code>, 0 otherwise.</td>
+</tr>
+<tr class="odd">
+<td><code>log_domestic</code></td>
+<td>The natural log of <code>domestic</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Comment your code so a reader can follow each step.</p>
+<h2 id="business-questions"><strong>Business questions</strong></h2>
+<p>For each question: run the regression, show the table, and answer the questions asked. Keep each answer to <strong>three or four sentences</strong> unless told otherwise. Where a question asks for a number, give the number.</p>
+<p>All regression tables must be made with <code>stargazer</code> or <code>modelsummary</code> in R, or an equivalent in Python. Tables must show coefficients, standard errors or p-values, the number of observations, and R-squared for OLS or log-likelihood for logit. Rename the variable labels so a reader who has not seen your code can read the table. <strong>The templates contain a worked example of a formatted table: copy it and change the names.</strong></p>
+<h3 id="q1.-two-checks-before-any-modeling"><strong>Q1. Two checks before any modeling</strong></h3>
+<p><em>Before you model anything, you need to know two things about this data.</em></p>
+<p><strong>Check 1: how the three revenue columns fit together.</strong></p>
+<p>For each film, check whether <code>domestic</code> plus <code>foreign</code> equals <code>worldwide</code>. How many films pass?</p>
+<p>Then answer: if <code>worldwide</code> is just <code>domestic</code> plus <code>foreign</code>, what would a regression of <code>worldwide</code> on <code>domestic</code> tell you? Hint: one is part of the other. Two or three sentences. This is why the rest of this homework uses <code>foreign_share</code> instead.</p>
+<p><strong>Check 2: the films with no US release.</strong></p>
+<p>Some films in this data have <code>domestic</code> equal to zero. These are films that never opened in US theaters.</p>
+<ol type="1">
+<li>Report how many films have <code>domestic</code> equal to zero.</li>
+<li>Among those films, what share is <code>foreign_dominant</code>? Why is that share not a surprise?</li>
+<li>Report the share of <strong>all</strong> films that are <code>foreign_dominant</code>, then the share among films with <code>domestic</code> above zero. The two numbers are not close.</li>
+<li><strong>Drop these films for the rest of the assignment</strong>, and give one reason why keeping them would be a problem. Two hints: what is <code>foreign_share</code> for every one of them, and what is <code>log_domestic</code>?</li>
+</ol>
+<p><strong>Use this sample for the rest of the assignment.</strong> Report how many films are in it.</p>
+<h3 id="q2.-which-genres-travel"><strong>Q2. Which genres travel</strong></h3>
+<p>Run this regression:</p>
+<pre><code>foreign_share ~ first_genre + english + year</code></pre>
+<p>Use <strong>Comedy</strong> as your baseline genre. It is one of the two most common genres in the data, which makes it a useful comparison point.</p>
+<p>Answer three questions:</p>
+<ol type="1">
+<li>Which genres earn a larger share of their money abroad than Comedy does, and which earn less? Report the two or three largest coefficients in percentage points.</li>
+<li>How large is the <code>english</code> coefficient compared to the genre coefficients? What does that tell you about whether language or genre matters more here?</li>
+<li>What does the coefficient on <code>year</code> say about the direction the international market has moved since 2000? Multiply it by 25 to get the change across the whole period. Is that change large enough to matter for a slate being decided today?</li>
+</ol>
+<h3 id="q3.-two-models-and-which-one-you-can-actually-use"><strong>Q3. Two models, and which one you can actually use</strong></h3>
+<p><em>This is the most important question in this homework.</em></p>
+<p>Run the Q2 regression again, with three variables added:</p>
+<pre><code>foreign_share ~ first_genre + english + year + rating + log(vote_count) + log_domestic</code></pre>
+<p>Put <strong>both models side by side in one table</strong>. The second model has a higher R-squared.</p>
+<p>Now answer four questions:</p>
+<ol type="1">
+<li><p><strong>Go through the three new variables one at a time.</strong> For each one, say whether the studio would know that number <em>before</em> deciding to make the film. A film that has not been made yet has no audience rating and no vote count.</p></li>
+<li><p><strong>Look again at how you built <code>foreign_share</code>.</strong> It is <code>foreign / worldwide</code>, and <code>worldwide</code> includes <code>domestic</code>. So <code>domestic</code> is on both sides: as a predictor, and inside the outcome. What does that do to the coefficient on <code>log_domestic</code>? Can you read it as “films that earn more at home travel less”? Two or three sentences.</p></li>
+<li><p><strong>Compare the genre coefficients across the two models.</strong> Pick the genre with the largest coefficient in the first model and report its value in both models. Does the second model make that genre’s advantage look larger or smaller?</p></li>
+<li><p><strong>Which model will you use for your recommendation?</strong> A higher R-squared does not make a model more useful for a decision. Say which model you are using and why, in two or three sentences.</p></li>
+</ol>
+<h3 id="q4.-from-a-probability-to-a-decision"><strong>Q4. From a probability to a decision</strong></h3>
+<p>Run this logistic regression, using <strong>only</strong> the variables from Q2:</p>
+<pre><code>foreign_dominant ~ first_genre + english + year</code></pre>
+<p>Report <strong>odds ratios</strong> as well as coefficients. Say which variables raise and which lower the odds that a film earns more abroad than at home.</p>
+<p>Then answer two questions:</p>
+<ol type="1">
+<li><p><strong>Is the model better than the obvious alternative?</strong> Suppose you ignored the model and predicted the more common outcome for every single film. How often would you be right? Now report how often your model is right, using a 0.5 cutoff. Report both numbers. Is the model worth having?</p></li>
+<li><p><strong>Pick a threshold.</strong> The studio will pay for a full international marketing campaign for some films but not all. Above what predicted probability would you pay for one? Give a number between 0 and 1.</p>
+<p>Justify it by what each mistake costs. Spending on a film that does not travel wastes money. Not supporting a film that would have travelled loses revenue. Say which mistake worries you more and why your threshold reflects that. There is no correct answer here, but there are answers you can defend and answers you cannot.</p></li>
+</ol>
+<h3 id="q5.-the-slate"><strong>Q5. The slate</strong></h3>
+<p>Using the model you chose in Q3, recommend how many of the 10 films should be in each genre.</p>
+<p><strong>Give slot counts that add to 10.</strong> A direction such as “more animation” is not an answer. <strong>No genre may get more than 4 slots</strong>: the studio will not bet the year on one kind of film.</p>
+<p>Before you decide, compute the correlation between <code>log_domestic</code> and <code>foreign_share</code>. Report the number and say what it means in one sentence. Then look at the average <code>domestic</code> revenue by <code>first_genre</code>: do the genres that travel best earn less at home, or more?</p>
+<p>Then write <strong>4–5 sentences</strong> explaining your slate. Name the genre you are giving up slots on, and say what you are losing by doing that.</p>
+<h2 id="memo-half-a-page"><strong>Memo (half a page)</strong></h2>
+<p>Write a short memo to the head of international. She understands the business but does not write code.</p>
+<p>Four parts, in this order:</p>
+<ol type="1">
+<li><strong>Your recommendation in the first sentence.</strong> The genres and the slot counts.</li>
+<li><strong>The two findings that support it.</strong> Each one must point to a regression you ran.</li>
+<li><strong>The biggest risk</strong> in your recommendation, in one or two sentences.</li>
+<li><strong>What this data does not tell you.</strong> List up to three things the file does not contain that your recommendation depends on. Here is one, so you can see the level of detail we want: <em>the file has no production budgets, so I can compare revenue across genres but not profit, and the studio is choosing on profit.</em> Then name one dataset you would ask for before the studio approves the slate.</li>
+</ol>
+<p>No code and no jargon. Do not use a statistic you have not explained.</p>
+<h2 id="interpretation-guidelines"><strong>Interpretation guidelines</strong></h2>
+<p>For every regression:</p>
+<ol type="1">
+<li><strong>Use business units.</strong> “Animation earns about 21 percentage points more of its revenue abroad than Comedy” is an interpretation. “The coefficient is positive and significant” is not.</li>
+<li><strong>Name the trade-off.</strong> Every recommendation costs something. Say what yours costs.</li>
+<li><strong>Stay inside your evidence.</strong> This data has box office, ratings, votes, language and genre. It has no production budget, no marketing spend, no streaming revenue, and no films outside the top 200 of their year. You may make assumptions, but write them down.</li>
+</ol>
+<p>Write for a manager who understands the business but does not program.</p>
+<h2 id="deliverables"><strong>Deliverables</strong></h2>
+<p>Submit <strong>both</strong>:</p>
+<ol type="1">
+<li><strong>Your source file</strong>: an RMarkdown file (<code>.Rmd</code>) or a Jupyter notebook (<code>.ipynb</code>).</li>
+<li><strong>The rendered version</strong>: HTML or PDF.</li>
+</ol>
+<p><strong>If your file will not render, submit the source file anyway with a short note describing the error.</strong> You will lose the reproducibility points, but everything else will still be graded. Submitting nothing because the file would not knit is the worst outcome.</p>
+<p>Your file must contain, in this order:</p>
+<ol type="1">
+<li>A short introduction in your own words: the situation and the decision you have to make.</li>
+<li>Data loading from the course link, plus your check of rows and missing values.</li>
+<li>Q1 through Q5, with tables and answers.</li>
+<li>The memo.</li>
+<li>Your AI usage statement.</li>
+</ol>
+<p>You must also submit an <strong>AI log file</strong>: the full conversation, as a link, a Word document, a <code>.txt</code> file, or the <code>ai-log.md</code> file your assistant has been keeping since week 1. As the syllabus states, <strong>a missing log costs 20% of your assignment grade.</strong> A summary of your prompts is not a log.</p>
+<p><strong>Before submitting</strong>, knit your file with the play button in VS Code (or <em>Kernel → Restart Kernel and Run All Cells</em> in Jupyter). If it fails, ask your assistant to knit it and paste the error. If it does not run cleanly for you, it will not run cleanly for the TA.</p>
+<h2 id="grading-rubric-100-points"><strong>Grading rubric (100 points)</strong></h2>
+<table>
+<colgroup>
+<col style="width: 33%" />
+<col style="width: 33%" />
+<col style="width: 33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th><strong>Category</strong></th>
+<th><strong>Points</strong></th>
+<th><strong>Description</strong></th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td><strong>Q1: the two checks</strong></td>
+<td>20</td>
+<td>Both checks are run and the numbers are reported. The answer explains why a regression of <code>worldwide</code> on <code>domestic</code> is not useful. The zero-domestic films are found, counted, and dropped, with a reason.</td>
+</tr>
+<tr class="even">
+<td><strong>Q3: which model you can use</strong></td>
+<td>25</td>
+<td>The three added variables are sorted into known-before and known-after. The <code>domestic</code> problem is explained. Genre coefficients are compared across both models with numbers. A model is chosen and defended.</td>
+</tr>
+<tr class="odd">
+<td><strong>Interpretation (Q2, Q3, Q4)</strong></td>
+<td>20</td>
+<td>Coefficients are read in percentage points and odds ratios, not described as positive or significant. The year trend is converted to a number over the full period. The accuracy comparison in Q4 is done correctly.</td>
+</tr>
+<tr class="even">
+<td><strong>Decisions (Q4 and Q5)</strong></td>
+<td>20</td>
+<td>A specific threshold with a cost-based reason. A slate with slot counts that add to 10, tied to the model chosen in Q3, with the trade-off named. Vague answers such as “it depends on strategy” score low even with good analysis behind them.</td>
+</tr>
+<tr class="odd">
+<td><strong>Memo</strong></td>
+<td>10</td>
+<td>Half a page. Recommendation first. Each claim points to a regression. Readable by someone who does not program.</td>
+</tr>
+<tr class="even">
+<td><strong>Reproducibility &amp; presentation</strong></td>
+<td>5</td>
+<td>Renders in a fresh session reading from the course link. Regression tables use a table package and have readable variable labels. Partial credit if rendering fails but the source was submitted with an explanation.</td>
+</tr>
+<tr class="odd">
+<td><strong>AI usage log</strong></td>
+<td>Pass/fail</td>
+<td>Not scored. A missing or incomplete log triggers the 20% syllabus penalty. An answer that pastes AI output you have not checked gets no credit.</td>
+</tr>
+</tbody>
+</table>
+<h1 id="templates">Templates</h1>
+<p>Two starter files are provided:</p>
+<ol type="1">
+<li><strong>RMarkdown template</strong> (<code>hw2_template.Rmd</code>)</li>
+<li><strong>Jupyter notebook template</strong> (<code>hw2_template.ipynb</code>)</li>
+</ol>
+<p>Both templates:</p>
+<ul>
+<li>Contain a heading for every graded section, in submission order. Do not delete or rename these headings; they match the grading rubric.</li>
+<li>Load the data from the course link and include the check of rows and missing values.</li>
+<li>Include <strong>one worked example of a formatted regression table.</strong> Table formatting is not what this homework tests, so this is given to you. Copy it and change the names.</li>
+<li>Give you the model formulas from the assignment, ready to fill in. The regressions are not the graded part; your answers about them are.</li>
+</ul>
+</body>
+</html>
